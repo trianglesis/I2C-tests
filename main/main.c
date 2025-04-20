@@ -92,14 +92,13 @@ void app_main(void)
     // Communicate with CO2
     uint8_t* buff_wr = communication_buffer;
     uint16_t local_offset = 0;
-    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x36f6);
-
-    // Send wake_up cmd and wait 30 ms
-    int sleep_ms = 30;
-    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
-    ESP_LOGI(TAG, "CMD Wake Up sent!");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
-    // ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buf, sizeof(buf), buffer, 2, -1));
+    int sleep_ms = 30;  // Send cmd and wait 30 ms
+    
+    // local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x36f6);
+    // ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
+    // ESP_LOGI(TAG, "CMD Wake Up sent!");
+    // vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
+    // // ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buffer, 2, -1));
     
     // Read serial number
     local_offset = 0; // Reset offset

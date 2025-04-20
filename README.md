@@ -313,14 +313,18 @@ Let's move forward and get more meaningfull data.
 It stopped working:
 
 ```log
-I (591) i2c_master: Master bus added!
-I (591) i2c_master: CO2 sensor device added!
 I (591) i2c_master: Temperature sensor device added!
-I (601) i2c_master: All devices added! Start communication
-E (1601) i2c.master: I2C transaction unexpected nack detected
-E (1601) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
-E (1601) i2c.master: i2c_master_multi_buffer_transmit(1186): I2C transaction failed
-ESP_ERROR_CHECK failed: esp_err_t 0x103 (ESP_ERR_INVALID_STATE) at 0x4200c35c
+I (10601) i2c_master: All devices added! Start communication
+E (10601) i2c.master: I2C transaction unexpected nack detected
+E (10601) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
+E (10601) i2c.master: i2c_master_multi_buffer_transmit(1186): I2C transaction failed
+ESP_ERROR_CHECK failed: esp_err_t 0x103 (ESP_ERR_INVALID_STATE) at 0x4200c292
+--- 0x4200c292: app_main at D:/Projects/ESP/projects/ESP32-C6/I2C-tests/main/main.c:99 (discriminator 1)
+
+file: "./main/main.c" line 99
+func: app_main
+expression: i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30)
+
 ```
 
 Test I2C:
@@ -339,6 +343,24 @@ i2c-tools> i2cdetect
 ```
 
 It's ok...
+Log is the same!
+
+Now disable the wake up cmd and check again:
+
+```log
+I (10566) i2c_master: All devices added! Start communication
+E (10566) i2c.master: I2C transaction unexpected nack detected
+E (10566) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
+E (10566) i2c.master: i2c_master_transmit_receive(1220): I2C transaction failed
+ESP_ERROR_CHECK failed: esp_err_t 0x103 (ESP_ERR_INVALID_STATE) at 0x4200c2a0
+--- 0x4200c2a0: app_main at D:/Projects/ESP/projects/ESP32-C6/I2C-tests/main/main.c:110 (discriminator 1)
+
+file: "./main/main.c" line 110
+func: app_main
+expression: i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms)
+
+abort() was called at PC 0x40805835 on core 0
+```
 
 ### Start measurements
 
