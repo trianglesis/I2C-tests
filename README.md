@@ -430,16 +430,66 @@ With all examples we have from above, we can repeat most of the code just to cla
 The process is the same, use modern i2c driver call to obtain sensor readiness during CMD call.
 
 ```cpp
-static void taking_measurements(void * pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(5000)); // CO2 ready in 5 sec
-
-}
-
-    uint16_t co2;
-    float temperature, humidity;
+    // Consume measurements with 5 sec interval!
+    TriesCount = 10;
+    local_offset = 0; // Reset offset
+    uint8_t buff_r[3] = {0};  // Output: serial number
+    sleep_ms = (1 * 1000);  // Send cmd and wait 30 ms
+    bool dataReady;
+    uint16_t data_ready_status = 0;
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0xe4b8);
+    ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
     while (1) {
-        // Consume measurements with 5 sec interval!
-        xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot get Data ready status! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            data_ready_status = sensirion_common_bytes_to_uint16_t(&buff_wr[0]);
+            dataReady = (data_ready_status & 2047) != 0;
+            ESP_LOGI(TAG, "Data ready %d status: %d", data_ready_status, dataReady);
+            break;
+        }
     }
+```
 
+
+### Get Measurements
+
+Use `i2c_master_transmit_receive`
+
+
+```text
+Description: reads the sensor output. The measurement data can only be read out once per signal update interval as the buffer 
+is emptied upon read-out. If no data is available in the buffer, the sensor returns a NACK. To avoid a NACK response, the 
+get_data_ready_status can be issued to check data status (see Section 3.9.2 for further details). The I2C master can abort the 
+read transfer with a NACK followed by a STOP condition after any data byte if the user is not interested in subsequent data. 
+```
+
+| | | | |                                                                                                       |
+| :--- | :--- | :--- | :--- | :---                                                                              |
+| Write | 0xec05                                                                                                |
+| (hexadecimal) | Command                                                                                       |
+| Wait | 1 ms | command execution time                                                                          |
+| Response | 0x01f4 | 0x33 | 0x6667 | 0xa2 | 0x5eb9 | 0x3c                                                      |
+| (hexadecimal) | CO2 = 500 ppm | CRC of 0x01f4 |  Temp. = 25 °C | CRC of 0x6667 |  RH = 37% | CRC of 0x5eb9    |
+
+
+Probably works:
+
+```log
+I (557) i2c_master: Master bus added!
+I (557) i2c_master: CO2 sensor device added!
+I (557) i2c_master: Temperature sensor device added!
+I (567) i2c_master: All devices added! Start communication
+I (567) i2c_master: CMD Stop Measurements sent at start! Wait 5 sec!
+I (5577) i2c_master: CMD Wake Up sent!
+I (5577) i2c_master: CMD Serial sent!
+I (5577) i2c_master: Sensor serial number is: 0x4944 0x403e 0x0
+I (5577) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+I (10577) i2c_master: Data ready 58552 status: 1
+I (11577) i2c_master: RAW Measurements ready co2: 779, t: 18028 C Humidity: 0 (raw value)
+I (11577) main_task: Returned from app_main()
 ```

@@ -49,43 +49,6 @@ uint16_t sensirion_common_bytes_to_uint16_t(const uint8_t* bytes) {
     return (uint16_t)bytes[0] << 8 | (uint16_t)bytes[1];
 }
 
-static void taking_measurements(void * pvParameters) {
-    esp_err_t ret;
-    uint16_t TriesCount = 10;
-    TriesCount = 100;
-
-    uint16_t co2;
-    float temperature, humidity;
-    vTaskDelay(pdMS_TO_TICKS(30000));
-
-    uint8_t* buff_wr = communication_buffer;
-    uint16_t local_offset = 0;
-    uint8_t buff_r[3] = {0};  // Output: readiness
-    int sleep_ms = (1 * 1000);  // Send cmd and wait 30 ms
-    bool dataReady;
-    uint16_t data_ready_status = 0;
-
-
-    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0xe4b8);
-    while (1) {
-        ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
-        data_ready_status = sensirion_common_bytes_to_uint16_t(&buff_wr[0]);
-        dataReady = (data_ready_status & 2047) != 0;
-
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Cannot get Data ready status! Retry: %d", TriesCount);
-            vTaskDelay(pdMS_TO_TICKS(5000));
-            TriesCount--;
-            if (TriesCount == 0)
-                break;
-        } else {
-            ESP_LOGI(TAG, "Data ready %d status: %d", data_ready_status, dataReady);
-            break;
-        }
-    }
-
-}
-
 void app_main(void)
 {
     esp_err_t ret;
@@ -183,14 +146,15 @@ void app_main(void)
     }
     
     // Read serial number
+    uint8_t* buff_wr_serial = communication_buffer;
     local_offset = 0; // Reset offset
-    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x3682);
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr_serial, local_offset, 0x3682);
     TriesCount = 10;
     // Send and receive after a short wait
-    uint8_t buff_r[3] = {0};  // Output: serial number
+    uint8_t buff_r_serial[3] = {0};  // Output: serial number
     sleep_ms = 1 * 1000;
     while (1) {
-        ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
+        ret = i2c_master_transmit_receive(scd41_handle, buff_wr_serial, sizeof(buff_wr_serial), buff_r_serial, sizeof(buff_r_serial), sleep_ms);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Cannot get serial number of SO2 sensor! Retry: %d", TriesCount);
             vTaskDelay(pdMS_TO_TICKS(5000));
@@ -204,7 +168,7 @@ void app_main(void)
     }
     // Transform received:
     uint16_t buff_serial[3] = {0};
-    sensirion_common_copy_bytes(&buff_r[0], (uint8_t*)buff_serial, (sizeof(buff_serial) * 2));
+    sensirion_common_copy_bytes(&buff_r_serial[0], (uint8_t*)buff_serial, (sizeof(buff_serial) * 2));
     // Sensiniron
     ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x", (int)buff_serial[0], (int)buff_serial[1], (int)buff_serial[2]);
 
@@ -212,8 +176,8 @@ void app_main(void)
     TriesCount = 10;
     local_offset = 0; // Reset offset
     local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x21b1);
-    ret = i2c_master_transmit(scd41_handle, buff_wr, local_offset, -1);
     while (1) {
+        ret = i2c_master_transmit(scd41_handle, buff_wr, local_offset, -1);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Cannot start CO2 sensor measurements! Retry: %d", TriesCount);
             vTaskDelay(pdMS_TO_TICKS(5000));
@@ -222,6 +186,7 @@ void app_main(void)
                 break;
         } else {
             ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
+            vTaskDelay(pdMS_TO_TICKS(5000));
             break;
         }
     }
@@ -229,12 +194,13 @@ void app_main(void)
     // Consume measurements with 5 sec interval!
     TriesCount = 10;
     local_offset = 0; // Reset offset
-    sleep_ms = (1 * 1000);  // Send cmd and wait 30 ms
+    uint8_t buff_r[3] = {0};  // Output: serial number
+    sleep_ms = (1 * 1000);  // Send cmd and wait 1 sec
     bool dataReady;
     uint16_t data_ready_status = 0;
     local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0xe4b8);
-    ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
     while (1) {
+        ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Cannot get Data ready status! Retry: %d", TriesCount);
             vTaskDelay(pdMS_TO_TICKS(5000));
@@ -245,10 +211,46 @@ void app_main(void)
             data_ready_status = sensirion_common_bytes_to_uint16_t(&buff_wr[0]);
             dataReady = (data_ready_status & 2047) != 0;
             ESP_LOGI(TAG, "Data ready %d status: %d", data_ready_status, dataReady);
+            vTaskDelay(pdMS_TO_TICKS(1000));
             break;
         }
     }
 
-    // xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+    // Get measurements
+    TriesCount = 30;
+    uint16_t co2Raw;         // ppm
+    int32_t temperatureRaw;  // millicelsius
+    int32_t humidityRaw;     // millipercent
+    // 
+    uint8_t* buff_wr_measurements = communication_buffer;
+    uint8_t* buff_r_measurements = communication_buffer;
+    local_offset = 0; // Reset offset
+    sleep_ms = (1 * 1000);  // Send cmd and wait 1 sec
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr_measurements, local_offset, 0xec05);
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        ret = i2c_master_transmit_receive(scd41_handle, buff_wr_measurements, sizeof(buff_wr_measurements), buff_r_measurements, sizeof(buff_r_measurements), sleep_ms);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot get measurements! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            co2Raw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[0]);
+            temperatureRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[2]);
+            humidityRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[4]);
+            ESP_LOGI(TAG, "RAW Measurements ready co2: %d, t: %ld C Humidity: %ld (raw value)", co2Raw, temperatureRaw, humidityRaw);
+            
+            // uint16_t temperature;
+            // uint16_t humidity;
+            // temperatureRaw = ((21875 * (int32_t)temperature) >> 13) - 45000;
+            // humidityRaw = ((12500 * (int32_t)humidity) >> 13);
+            // const float humidityPercent = humidityRaw / 1000.0f;
+            // ESP_LOGI(TAG, "Converted measurements co2: %d, t: %.1f C Humidity: %.1f%%", co2Raw, temperatureRaw, humidityPercent);
+            break;
+        }
+    }
+
 
 }
