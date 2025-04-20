@@ -186,3 +186,18 @@ ESP_ERROR_CHECK(i2c_master_get_bus_handle(0, &bus_handle));
 - `port_num` -- I2C port number for which the handle is to be retrieved.
 - `ret_handle` -- Pointer to a variable where the retrieved handle will be stored.
 
+Build and see if there are no errors in console.
+
+### Test and use
+
+Config the build now.
+`LOG_DEFAULT_LEVEL` to debug
+`I2C_ENABLE_DEBUG_LOG` to debug
+
+
+Use [example](https://github.com/UncleRus/esp-idf-lib/blob/a02cd6bb5190cab379125140780adcb8d88f9650/examples/scd4x/default/main/main.c) (old) as refference.
+
+We are skipping parts with `i2cdev` implemenatation and diretcly sending CMD to our sensor.
+
+Will trink about consurrency later, when sensor starts to work.
+

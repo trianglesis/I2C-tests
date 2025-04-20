@@ -1,4 +1,8 @@
 #include <stdio.h>
+#include <esp_log.h>
+#include <esp_err.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "driver/i2c_master.h"
 
 #define I2C_PORT 0
@@ -11,6 +15,8 @@
 #define BME680_I2C_ADDR_1 0x77  // this
 
 #define I2C_FREQ_HZ 100000 // 100kHz - usual
+
+static const char *TAG = "i2c_master";
 
 
 void app_main(void)
@@ -27,6 +33,7 @@ void app_main(void)
 
     i2c_master_bus_handle_t bus_handle;
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+    ESP_LOGI(TAG, "Master bus added!");
 
     // Add CO2 sensor first
     i2c_device_config_t scd41_cfg = {
@@ -37,6 +44,7 @@ void app_main(void)
     // Add CO2 first
     i2c_master_dev_handle_t scd41_handle;
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &scd41_cfg, &scd41_handle));
+    ESP_LOGI(TAG, "CO2 sensor device added!");
 
     // Configure BMD680
     i2c_device_config_t bme680_cfg = {
@@ -48,5 +56,10 @@ void app_main(void)
     // Add BME680 device second
     i2c_master_dev_handle_t bme680_handle;
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle));
+    ESP_LOGI(TAG, "Temperature sensor device added!");
 
+    ESP_LOGI(TAG, "All devices added! Start communication");
+    vTaskDelay(pdMS_TO_TICKS(1000)); // let sensors warm up for 1 second
+
+    // Communicate with CO2
 }
