@@ -193,6 +193,7 @@ Build and see if there are no errors in console.
 Config the build now.
 `LOG_DEFAULT_LEVEL` to debug
 `I2C_ENABLE_DEBUG_LOG` to debug
+`ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS` to `120` seconds, to have a time to read the log.
 
 
 Use [example](https://github.com/UncleRus/esp-idf-lib/blob/a02cd6bb5190cab379125140780adcb8d88f9650/examples/scd4x/default/main/main.c) (old) as refference.
@@ -220,12 +221,12 @@ Assign vars and reuse buffer helpers from [Sensiniron](https://github.com/Sensir
 
 ```cpp
     // Communicate with CO2
-    uint8_t* buffer_ptr = communication_buffer;
+    uint8_t* buff_wr = communication_buffer;
     uint16_t local_offset = 0;
-    local_offset = sensirion_i2c_add_command16_to_buffer(buffer_ptr, local_offset, 0x36f6);
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x36f6);
 
     // Send wake_up cmd and wait 30 ms
-    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buffer_ptr, local_offset, 30));
+    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
     ESP_LOGI(TAG, "CMD Wake Up sent!");
 ```
 
@@ -254,20 +255,20 @@ Use Sensiniron approach and copy their method: [sensirion_common_copy_bytes](htt
 
 ```cpp
     // Read serial number
-    uint16_t serial_number[3] = {0};
+    uint16_t serial_n_buff[3] = {0};
     local_offset = 0; // Reset offset
-    local_offset = sensirion_i2c_add_command16_to_buffer(buffer_ptr, local_offset, 0x3682);
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x3682);
     // Send and receive after a short wait
-    uint8_t buffer[3] = {0};  // Output: serial number
+    uint8_t buff_r[3] = {0};  // Output: serial number
     sleep_ms = 1 * 1000;
-    ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buffer_ptr, sizeof(buffer_ptr), buffer, sizeof(buffer), sleep_ms));
+    ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms));
     // Transform received:
-    sensirion_common_copy_bytes(&buffer[0], (uint8_t*)serial_number, (sizeof(serial_number) * 2));
-    ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x\n", (int)serial_number[0], (int)serial_number[1], (int)serial_number[2]);
+    sensirion_common_copy_bytes(&buff_r[0], (uint8_t*)serial_n_buff, (sizeof(serial_n_buff) * 2));
+    ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x\n", (int)serial_n_buff[0], (int)serial_n_buff[1], (int)serial_n_buff[2]);
 ```
 
 Where vars are:
-- `serial_number` - where to save parsed number, as per Sensiniron example
+- `serial_n_buff` - where to save parsed number, as per Sensiniron example
 - `local_offset` - reset cmd buffer to 0 again
 - `buffer` - where to receive the CMD `get serial num` output
 - `sleep_ms` - from `UncleRus` example, wait for answer
@@ -284,4 +285,51 @@ And it's working fine:
 
 ```log
 I (1567) i2c_master: Sensor serial number is: 0x499f 0xe0 0x499f
+```
+
+By datasheet is should be like: `Example: serial number is 273’325’796’834’238`
+
+
+| | | | |                                                                                       |
+| :--- | :--- | :--- | :--- | :---                                                              |
+| Write | 0x3682                                                                                |
+| (hexadecimal) | Command                                                                       |
+| Wait | 1 ms | command execution time                                                          |
+| Response | 0xf896 | 0x31 | 0x9f07 | 0xc2 | 0x3bbe | 0x89                                      |
+| (hexadecimal) | word[0] | CRC of 0xf896 |  word[1] | CRC of 0x9f07 | word[2] | CRC of 0x3bbe  |
+
+Seems like I have a right response, but it should be converted, probably.
+
+Testing different aaproaches and it now shows stable output:
+
+```log
+I (1567) i2c_master: Sensor serial number is: 0x499f 0xe0 0x1c24
+```
+
+Let's move forward and get more meaningfull data.
+
+### Start measurements
+
+
+- [scd4x_start_periodic_measurement](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/sample-implementations/RaspberryPi_Pico/main.c#L50)
+
+```cpp
+    // Start measurement
+    local_offset = 0; // Reset offset
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x21b1);
+    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
+    ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
+```
+
+
+### Get Data Ready status
+
+Moving forward and now we should get sensor readiness.
+
+With all examples we have from above, we can repeat most of the code just to clarify the process.
+
+The process is the same, use modern i2c driver call to obtain sensor readiness during CMD call.
+
+```cpp
+
 ```
