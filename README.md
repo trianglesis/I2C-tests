@@ -1,5 +1,15 @@
 # Test I2C
 
+This project is just a separate logical branch from another project. 
+
+This is clean setup to test new `I2C` driver from `IDF 5.4.1` with few sensors I have.
+
+I will reuse old examples to send\reveive commands, but with a new I2C driver.
+
+NEW I2C driver from 5.4+ [version](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html)
+
+## Info
+
 This is a separate "branch" from my project [Air_Quality_station](https://github.com/trianglesis/Air_Quality_station/blob/4802c416501cf49720c3299119afd54bb335f894/README.md)
 
 Where I stuck with `NACK` messages for any interaction with `I2C` device.
@@ -15,18 +25,49 @@ Then, create a `I2C` bus and communicate with devices:
 
 ## SDC4x
 
+See datasheet.
+Address: `0x62`
+
 There are two representations for this sensor, both rely on old `I2C` driver and have partial implementation, something work, something is not:
 
 - [ESP IDF Lib (old)](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b)
 - [Sensirion (newer)](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b)
+- [issue](https://github.com/UncleRus/esp-idf-lib/issues/582)
+- [issue](https://github.com/UncleRus/esp-idf-lib/issues/624)
+- [old driver](https://github.com/UncleRus/esp-idf-lib/issues/667)
 
+My current issue with `ESO IDF Lib`
+
+```log
+I (10157) CO2 SCD41 INIT: run scd4x_get_serial_number
+D (10167) i2cdev: Reconfiguring I2C driver on port 0
+D (10167) intr_alloc: Connected src 50 to int 15 (cpu 0)
+D (10177) i2cdev: I2C driver successfully reconfigured on port 0
+D (10187) i2cdev: Timeout: ticks = 0 (0 usec) on port 0
+D (10177) wifi:mms: 0->0
+E (10187) i2cdev: Could not write to device [0x62 at 0]: -1 (ESP_FAIL)
+ESP_ERROR_CHECK failed: esp_err_t 0xffffffff (ESP_FAIL) at 0x42011308
+--- 0x42011308: sensor_init at D:/Projects/ESP/projects/ESP32-C6-OLED/Air_Quality_station/main/sensor_co2/co2_sensor.c:164 (discriminator 1)
+
+file: "./main/sensor_co2/co2_sensor.c" line 164
+func: sensor_init
+expression: scd4x_get_serial_number(&dev, serial, serial + 1, serial + 2)
+
+abort() was called at PC 0x4080b6d1 on core 0
+--- 0x4080b6d1: _esp_error_check_failed at D:/Projects/ESP/Espressif/v5.4.1/esp-idf/components/esp_system/esp_err.c:49
+```
 
 ## BME680
+
+See datasheet.
+Address: `0x77`
+
 
 There is also a driver for `BME680` from the same repo, but again, it relies on an old `I2C` driver and there are issues with this driver:
 
 - [ESP IDF Lib (old)](https://github.com/UncleRus/esp-idf-lib/blob/a02cd6bb5190cab379125140780adcb8d88f9650/components/bme680)
-
+- [issue](https://github.com/UncleRus/esp-idf-lib/issues/609)
+- [old driver](https://github.com/UncleRus/esp-idf-lib/issues/667)
 
 ## Test and discover
 
@@ -34,10 +75,9 @@ Use `i2c_tools` from IDF official repo.
 
 Both sensors are using same pins: `i2cconfig  --port=0 --freq=100000 --sda=22 --scl=23`
 
-
 ![pins](doc/pics/sensor_pins_i2c.png)
 
-Both of them discovered correctly
+Both of them discovered correctly, this means pins and solder OK
 
 ```log
 i2c-tools> i2cconfig  --port=0 --freq=100000 --sda=22 --scl=23
@@ -52,3 +92,97 @@ i2c-tools> i2cdetect
 60: -- -- 62 -- -- -- -- -- -- -- -- -- -- -- -- --
 70: -- -- -- -- -- -- -- 77 -- -- -- -- -- -- -- --
 ```
+
+
+## Setup and run
+
+Saving some doc here for faster accesss
+
+### Init
+
+```cpp
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_PORT,
+        .scl_io_num = COMMON_SCL_PIN,
+        .sda_io_num = COMMON_SDA_PIN,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+```
+
+- [i2c_master_bus_config_t](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#_CPPv423i2c_master_bus_config_t)
+
+Hints for LP:
+
+- [LP core](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#install-i2c-master-bus-with-lp-i2c-peripheral)
+
+```cpp
+i2c_master_bus_config_t i2c_mst_config = {
+    .clk_source = LP_I2C_SCLK_DEFAULT,    // clock source for LP I2C, might different from HP I2C
+    .i2c_port = LP_I2C_NUM_0,             // Assign to LP I2C port
+    .scl_io_num = 7,                      // SCL IO number. Please refer to technical reference manual
+    .sda_io_num = 6,                      // SDA IO number. Please refer to technical reference manual
+    .glitch_ignore_cnt = 7,
+    .flags.enable_internal_pullup = true,
+};
+```
+
+Probably need to check PINs with names:
+- `LP_GPIO6` - `LP_I2C_SDA`
+- `LP_GPIO7` - `LP_I2C_SCL`
+
+
+### Conf
+
+Config device or two
+
+```cpp
+    // Add CO2 sensor first
+    i2c_device_config_t dev_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = SCD4X_I2C_ADDR,
+        .scl_speed_hz = 100000,
+    };
+```
+
+- [i2c_device_config_t](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#_CPPv419i2c_device_config_t)
+  - `disable_ack_check` - Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.
+  - `scl_wait_us` - Timeout value. (unit: us). Please note this value should not be so small that it can handle stretch/disturbance properly. If 0 is set, that means use the default reg value
+
+
+### Add
+
+Add devices
+
+```cpp
+    // Add CO2 first
+    i2c_master_dev_handle_t scd41_handle;
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &scd41_cfg, &scd41_handle));
+    // Add BME680 device second
+    i2c_master_dev_handle_t bme680_handle;
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle));
+```
+
+- `bus_handle` -- [in] I2C bus handle.
+  -  This is common bus for all devices!
+- `dev_config` -- [in] device config.
+  -  This is UNIQUE var for a SINGLE device
+- `ret_handle` -- [out] device handle.
+  -  This is UNIQUE handle of a SINGLE device
+
+Returns:
+- `ESP_OK`: Create I2C master device successfully.
+- `ESP_ERR_INVALID_ARG`: I2C bus initialization failed because of invalid argument.
+- `ESP_ERR_NO_MEM`: Create I2C bus failed because of out of memory.
+
+Hint: use `i2c_master_get_bus_handle` to obtain al already created bus for another device to add, [doc](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#get-i2c-master-handle-via-port)
+
+```cpp
+i2c_master_bus_handle_t bus_handle;
+ESP_ERROR_CHECK(i2c_master_get_bus_handle(0, &bus_handle));
+```
+
+- `port_num` -- I2C port number for which the handle is to be retrieved.
+- `ret_handle` -- Pointer to a variable where the retrieved handle will be stored.
+
