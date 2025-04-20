@@ -227,6 +227,28 @@ void app_main(void)
     }
 
     // Consume measurements with 5 sec interval!
-    xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+    TriesCount = 10;
+    local_offset = 0; // Reset offset
+    sleep_ms = (1 * 1000);  // Send cmd and wait 30 ms
+    bool dataReady;
+    uint16_t data_ready_status = 0;
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0xe4b8);
+    ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
+    while (1) {
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot get Data ready status! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            data_ready_status = sensirion_common_bytes_to_uint16_t(&buff_wr[0]);
+            dataReady = (data_ready_status & 2047) != 0;
+            ESP_LOGI(TAG, "Data ready %d status: %d", data_ready_status, dataReady);
+            break;
+        }
+    }
+
+    // xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
 
 }

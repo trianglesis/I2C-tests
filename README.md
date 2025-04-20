@@ -391,16 +391,20 @@ I (35656) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec inte
 Another approach - trying to stop sensor at the startup:
 
 ```log
-I (557) i2c_master: Master bus added!
-I (557) i2c_master: CO2 sensor device added!
-I (557) i2c_master: Temperature sensor device added!
-I (567) i2c_master: All devices added! Start communication
-I (567) i2c_master: CMD Stop Measurements sent at start! Wait 5 sec!
-I (5577) i2c_master: CMD Wake Up sent!
-I (5577) i2c_master: CMD Serial sent!
-I (5577) i2c_master: Sensor serial number is: 0x4944 0x403e 0x0
-I (5577) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+I (556) i2c_master: Master bus added!
+I (556) i2c_master: CO2 sensor device added!
+I (556) i2c_master: Temperature sensor device added!
+I (566) i2c_master: All devices added! Start communication
+I (566) i2c_master: CMD Stop Measurements sent at start! Wait 5 sec!
+I (5576) i2c_master: CMD Wake Up sent!
+I (5576) i2c_master: CMD Serial sent!
+I (5576) i2c_master: Sensor serial number is: 0x4944 0x403e 0x0
+I (5576) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+I (5586) i2c_master: Data ready 58552 status: 1
+I (5586) main_task: Returned from app_main()
 ```
+
+And it works! Moving on...
 
 ### Start measurements
 
