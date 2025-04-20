@@ -362,6 +362,46 @@ expression: i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), 
 abort() was called at PC 0x40805835 on core 0
 ```
 
+Adding while loop and retry counter:
+
+```log
+E (90767) i2c_master: Cannot get serial number of SO2 sensor! Retry: 2
+E (95777) i2c.master: I2C transaction unexpected nack detected
+E (95777) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
+E (95777) i2c.master: i2c_master_transmit_receive(1220): I2C transaction failed
+E (95777) i2c_master: Cannot get serial number of SO2 sensor! Retry: 1
+I (100787) i2c_master: Sensor serial number is: 0xe0e0 0xe0 0x1bfc
+E (100787) i2c.master: I2C transaction unexpected nack detected
+E (100787) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
+E (100787) i2c.master: i2c_master_multi_buffer_transmit(1186): I2C transaction failed
+E (100797) i2c_master: Cannot start CO2 sensor measurements! Retry: 10
+```
+
+Will now change sensors, check wires and try while loop 100
+
+As soon as sensor was plugged out and plugged in again:
+
+```log
+I (35656) i2c_master: CMD Wake Up sent!
+I (35656) i2c_master: CMD Serial sent!
+I (35656) i2c_master: Sensor serial number is: 0x4944 0x3e 0x1bfc
+I (35656) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+```
+
+Another approach - trying to stop sensor at the startup:
+
+```log
+I (557) i2c_master: Master bus added!
+I (557) i2c_master: CO2 sensor device added!
+I (557) i2c_master: Temperature sensor device added!
+I (567) i2c_master: All devices added! Start communication
+I (567) i2c_master: CMD Stop Measurements sent at start! Wait 5 sec!
+I (5577) i2c_master: CMD Wake Up sent!
+I (5577) i2c_master: CMD Serial sent!
+I (5577) i2c_master: Sensor serial number is: 0x4944 0x403e 0x0
+I (5577) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+```
+
 ### Start measurements
 
 
