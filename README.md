@@ -308,6 +308,38 @@ I (1567) i2c_master: Sensor serial number is: 0x499f 0xe0 0x1c24
 
 Let's move forward and get more meaningfull data.
 
+### Suddenly
+
+It stopped working:
+
+```log
+I (591) i2c_master: Master bus added!
+I (591) i2c_master: CO2 sensor device added!
+I (591) i2c_master: Temperature sensor device added!
+I (601) i2c_master: All devices added! Start communication
+E (1601) i2c.master: I2C transaction unexpected nack detected
+E (1601) i2c.master: s_i2c_synchronous_transaction(924): I2C transaction failed
+E (1601) i2c.master: i2c_master_multi_buffer_transmit(1186): I2C transaction failed
+ESP_ERROR_CHECK failed: esp_err_t 0x103 (ESP_ERR_INVALID_STATE) at 0x4200c35c
+```
+
+Test I2C:
+
+```log
+i2c-tools> i2cdetect
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00: 00 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- 62 -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- 77 -- -- -- -- -- -- -- -- 
+```
+
+It's ok...
+
 ### Start measurements
 
 
@@ -315,9 +347,10 @@ Let's move forward and get more meaningfull data.
 
 ```cpp
     // Start measurement
+    sleep_ms = 1 * 5000; // Wait 5 seconds before trying to get measurements
     local_offset = 0; // Reset offset
     local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x21b1);
-    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
+    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, sleep_ms));
     ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
 ```
 
@@ -331,5 +364,16 @@ With all examples we have from above, we can repeat most of the code just to cla
 The process is the same, use modern i2c driver call to obtain sensor readiness during CMD call.
 
 ```cpp
+static void taking_measurements(void * pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(5000)); // CO2 ready in 5 sec
+
+}
+
+    uint16_t co2;
+    float temperature, humidity;
+    while (1) {
+        // Consume measurements with 5 sec interval!
+        xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+    }
 
 ```

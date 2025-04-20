@@ -16,6 +16,11 @@
 
 #define I2C_FREQ_HZ 100000 // 100kHz - usual
 
+#define SPIN_ITER   350000  //actual CPU cycles consumed will depend on compiler optimization
+#define CORE0       0
+// only define xCoreID CORE1 as 1 if this is a multiple core processor target, else define it as tskNO_AFFINITY
+#define CORE1       ((CONFIG_FREERTOS_NUMBER_OF_CORES > 1) ? 1 : tskNO_AFFINITY)
+
 static const char *TAG = "i2c_master";
 
 static uint8_t communication_buffer[9] = {0};
@@ -37,6 +42,10 @@ void sensirion_common_copy_bytes(const uint8_t* source, uint8_t* destination, ui
     }
 }
 
+static void taking_measurements(void * pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(5000)); // CO2 ready in 5 sec
+
+}
 
 void app_main(void)
 {
@@ -77,8 +86,8 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle));
     ESP_LOGI(TAG, "Temperature sensor device added!");
 
+    vTaskDelay(pdMS_TO_TICKS(10000)); // let sensors warm up for 1 second
     ESP_LOGI(TAG, "All devices added! Start communication");
-    vTaskDelay(pdMS_TO_TICKS(1000)); // let sensors warm up for 1 second
 
     // Communicate with CO2
     uint8_t* buff_wr = communication_buffer;
@@ -89,6 +98,7 @@ void app_main(void)
     int sleep_ms = 30;
     ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
     ESP_LOGI(TAG, "CMD Wake Up sent!");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
     // ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buf, sizeof(buf), buffer, 2, -1));
     
     // Read serial number
@@ -99,14 +109,15 @@ void app_main(void)
     uint8_t buff_r[3] = {0};  // Output: serial number
     sleep_ms = 1 * 1000;
     ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms));
+    ESP_LOGI(TAG, "CMD Serial sent!");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
     
     // Transform received:
-    uint16_t serial_n_buff[3] = {0};
-    ESP_LOGI(TAG, "Serial number buffer size: %d", sizeof(serial_n_buff));
-    sensirion_common_copy_bytes(&buff_r[0], (uint8_t*)serial_n_buff, (sizeof(serial_n_buff) * 2));
-    ESP_LOGI(TAG, "Response buffer size: %d, serial number buffer size: %d", sizeof(buff_r), sizeof(serial_n_buff));
+    uint16_t buff_serial[3] = {0};
+    sensirion_common_copy_bytes(&buff_r[0], (uint8_t*)buff_serial, (sizeof(buff_serial) * 2));
     // Sensiniron
-    ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x", (int)serial_n_buff[0], (int)serial_n_buff[1], (int)serial_n_buff[2]);
+    ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x", (int)buff_serial[0], (int)buff_serial[1], (int)buff_serial[2]);
+    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
 
     // Start measurement
     local_offset = 0; // Reset offset
@@ -114,7 +125,14 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, -1));
     ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
 
-    // Consume measurements with 5 sec interval!
-    vTaskDelay(pdMS_TO_TICKS(5000)); // CO2 ready in 5 sec
+    vTaskDelay(pdMS_TO_TICKS(30000)); // let sensors warm up for 1 second
+
+    uint16_t co2;
+    float temperature, humidity;
+    while (1) {
+        // Consume measurements with 5 sec interval!
+        xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+    }
+    
 
 }
