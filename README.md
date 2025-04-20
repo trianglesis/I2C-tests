@@ -201,3 +201,87 @@ We are skipping parts with `i2cdev` implemenatation and diretcly sending CMD to 
 
 Will trink about consurrency later, when sensor starts to work.
 
+### Wake UP
+
+Start CO2 sensor with `wake_up` command using [I2C Master Write](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#i2c-master-write)
+
+
+| Command | Hex. Code  | I2C type     | time | During meas.  |
+| :---    | :---       | :---         | :--- | :---          |
+| `wake_up` | `0x36f6` | send command |  30  | no            |
+| `get_serial_number` | `0x3682` | read | 1    | no            |
+
+
+Using example from `Sensiniron`: [scd4x_wake_up](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/scd4x_i2c.c#L585)
+
+There is no other implemenatation of `HAL` or `i2c` driver, so we will use it now in RAW mode, directly communicating with device.
+
+Assign vars and reuse buffer helpers from [Sensiniron](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/sensirion_i2c.c#L180)
+
+```cpp
+    // Communicate with CO2
+    uint8_t* buffer_ptr = communication_buffer;
+    uint16_t local_offset = 0;
+    local_offset = sensirion_i2c_add_command16_to_buffer(buffer_ptr, local_offset, 0x36f6);
+
+    // Send wake_up cmd and wait 30 ms
+    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buffer_ptr, local_offset, 30));
+    ESP_LOGI(TAG, "CMD Wake Up sent!");
+```
+
+After sending the CMD - nothing bad happens, seems like it's working:
+
+```log
+I (1566) i2c_master: CMD Wake Up sent!
+```
+
+### Get Serial
+
+Now send cmd and receive serial! Using:
+- Sensiniron: [scd4x_get_serial_number](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/scd4x_i2c.c#L448)
+  - In Rasp example: [serial_number](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/sample-implementations/RaspberryPi_Pico/main.c#L40)
+- UncleRus: [scd4x_get_serial_number](https://github.com/UncleRus/esp-idf-lib/blob/a02cd6bb5190cab379125140780adcb8d88f9650/components/scd4x/scd4x.c#L317)
+
+New `i2c` driver gives us fancy method to send and receive at once: [i2c_master_transmit_receive](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#_CPPv427i2c_master_transmit_receive23i2c_master_dev_handle_tPK7uint8_t6size_tP7uint8_t6size_ti)
+
+Use new method, [doc](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#i2c-master-write-and-read)
+
+Modify default method according to real method from `UncleRus` repo, with buffer len 3:
+
+OR
+
+Use Sensiniron approach and copy their method: [sensirion_common_copy_bytes](https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/scd4x_i2c.c#L463)
+
+```cpp
+    // Read serial number
+    uint16_t serial_number[3] = {0};
+    local_offset = 0; // Reset offset
+    local_offset = sensirion_i2c_add_command16_to_buffer(buffer_ptr, local_offset, 0x3682);
+    // Send and receive after a short wait
+    uint8_t buffer[3] = {0};  // Output: serial number
+    sleep_ms = 1 * 1000;
+    ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buffer_ptr, sizeof(buffer_ptr), buffer, sizeof(buffer), sleep_ms));
+    // Transform received:
+    sensirion_common_copy_bytes(&buffer[0], (uint8_t*)serial_number, (sizeof(serial_number) * 2));
+    ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x\n", (int)serial_number[0], (int)serial_number[1], (int)serial_number[2]);
+```
+
+Where vars are:
+- `serial_number` - where to save parsed number, as per Sensiniron example
+- `local_offset` - reset cmd buffer to 0 again
+- `buffer` - where to receive the CMD `get serial num` output
+- `sleep_ms` - from `UncleRus` example, wait for answer
+
+The function args:
+- `i2c_dev` -- [in] I2C master device handle that created by i2c_master_bus_add_device.
+- `write_buffer` -- [in] Data bytes to send on the I2C bus.
+- `write_size` -- [in] Size, in bytes, of the write buffer.
+- `read_buffer` -- [out] Data bytes received from i2c bus.
+- `read_size` -- [in] Size, in bytes, of the read buffer.
+- `xfer_timeout_ms` -- [in] Wait timeout, in ms. Note: -1 means wait forever.
+
+And it's working fine:
+
+```log
+I (1567) i2c_master: Sensor serial number is: 0x499f 0xe0 0x499f
+```
