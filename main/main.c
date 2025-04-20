@@ -218,37 +218,47 @@ void app_main(void)
 
     // Get measurements
     TriesCount = 30;
+    uint16_t MeasuresCount = 10;
     uint16_t co2Raw;         // ppm
     int32_t temperatureRaw;  // millicelsius
     int32_t humidityRaw;     // millipercent
     // 
     uint8_t* buff_wr_measurements = communication_buffer;
     uint8_t* buff_r_measurements = communication_buffer;
-    local_offset = 0; // Reset offset
-    sleep_ms = (1 * 1000);  // Send cmd and wait 1 sec
-    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr_measurements, local_offset, 0xec05);
+    // Dumb loop to collect a few measurements
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1));
-        ret = i2c_master_transmit_receive(scd41_handle, buff_wr_measurements, sizeof(buff_wr_measurements), buff_r_measurements, sizeof(buff_r_measurements), sleep_ms);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Cannot get measurements! Retry: %d", TriesCount);
-            vTaskDelay(pdMS_TO_TICKS(5000));
-            TriesCount--;
-            if (TriesCount == 0)
-                break;
-        } else {
-            co2Raw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[0]);
-            temperatureRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[2]);
-            humidityRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[4]);
-            ESP_LOGI(TAG, "RAW Measurements ready co2: %d, t: %ld C Humidity: %ld (raw value)", co2Raw, temperatureRaw, humidityRaw);
-            
-            // uint16_t temperature;
-            // uint16_t humidity;
-            // temperatureRaw = ((21875 * (int32_t)temperature) >> 13) - 45000;
-            // humidityRaw = ((12500 * (int32_t)humidity) >> 13);
-            // const float humidityPercent = humidityRaw / 1000.0f;
-            // ESP_LOGI(TAG, "Converted measurements co2: %d, t: %.1f C Humidity: %.1f%%", co2Raw, temperatureRaw, humidityPercent);
+        local_offset = 0; // Reset offset
+        sleep_ms = (1 * 1000);  // Send cmd and wait 1 sec
+        local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr_measurements, local_offset, 0xec05);
+        MeasuresCount--;
+        if (MeasuresCount == 0) {
+            ESP_LOGI(TAG, "Stop measurements.");
             break;
+        }
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            ret = i2c_master_transmit_receive(scd41_handle, buff_wr_measurements, sizeof(buff_wr_measurements), buff_r_measurements, sizeof(buff_r_measurements), sleep_ms);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Cannot get measurements! Retry: %d", TriesCount);
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                TriesCount--;
+                if (TriesCount == 0) {
+                    break;
+                }
+            } else {
+                co2Raw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[0]);
+                temperatureRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[2]);
+                humidityRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[4]);
+                ESP_LOGI(TAG, "RAW Measurements ready co2: %d, t: %ld C Humidity: %ld (raw value)", co2Raw, temperatureRaw, humidityRaw);
+                
+                // uint16_t temperature;
+                // uint16_t humidity;
+                // temperatureRaw = ((21875 * (int32_t)temperature) >> 13) - 45000;
+                // humidityRaw = ((12500 * (int32_t)humidity) >> 13);
+                // const float humidityPercent = humidityRaw / 1000.0f;
+                // ESP_LOGI(TAG, "Converted measurements co2: %d, t: %.1f C Humidity: %.1f%%", co2Raw, temperatureRaw, humidityPercent);
+                break;
+            }
         }
     }
 

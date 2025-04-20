@@ -493,3 +493,29 @@ I (10577) i2c_master: Data ready 58552 status: 1
 I (11577) i2c_master: RAW Measurements ready co2: 779, t: 18028 C Humidity: 0 (raw value)
 I (11577) main_task: Returned from app_main()
 ```
+
+Added a dumb loop just for test and it works:
+
+```log
+I (557) i2c_master: Master bus added!
+I (557) i2c_master: CO2 sensor device added!
+I (557) i2c_master: Temperature sensor device added!
+I (567) i2c_master: All devices added! Start communication
+I (567) i2c_master: CMD Stop Measurements sent at start! Wait 5 sec!
+I (5577) i2c_master: CMD Wake Up sent!
+I (5577) i2c_master: CMD Serial sent!
+I (5577) i2c_master: Sensor serial number is: 0x4944 0x3e 0x0
+I (5577) i2c_master: CMD Start measurements sent! Get measumenets in 5 sec intervals
+I (10577) i2c_master: Data ready 58552 status: 1
+I (16577) i2c_master: RAW Measurements ready co2: 735, t: 29292 C Humidity: 0 (raw value)
+I (21577) i2c_master: RAW Measurements ready co2: 726, t: 64107 C Humidity: 0 (raw value)
+I (26577) i2c_master: RAW Measurements ready co2: 733, t: 4203 C Humidity: 0 (raw value)
+I (31577) i2c_master: RAW Measurements ready co2: 806, t: 35947 C Humidity: 0 (raw value)
+I (36577) i2c_master: RAW Measurements ready co2: 1024, t: 618 C Humidity: 0 (raw value)
+I (41577) i2c_master: RAW Measurements ready co2: 1223, t: 53866 C Humidity: 0 (raw value)
+I (46577) i2c_master: RAW Measurements ready co2: 1358, t: 54378 C Humidity: 0 (raw value)
+I (51577) i2c_master: RAW Measurements ready co2: 1442, t: 26729 C Humidity: 0 (raw value)
+I (56577) i2c_master: RAW Measurements ready co2: 1461, t: 48233 C Humidity: 0 (raw value)
+I (56577) i2c_master: Stop measurements.
+I (56577) main_task: Returned from app_main()
+```
