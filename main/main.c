@@ -43,12 +43,15 @@ void sensirion_common_copy_bytes(const uint8_t* source, uint8_t* destination, ui
 }
 
 static void taking_measurements(void * pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(5000)); // CO2 ready in 5 sec
+    vTaskDelay(pdMS_TO_TICKS(50000)); // CO2 ready in 5 sec
 
 }
 
 void app_main(void)
 {
+    esp_err_t ret;
+    uint16_t TriesCount = 10;
+
     // New I2C bus setup, new driver used, from IDF 5.4+
     i2c_master_bus_config_t i2c_mst_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -60,8 +63,13 @@ void app_main(void)
     };
 
     i2c_master_bus_handle_t bus_handle;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
-    ESP_LOGI(TAG, "Master bus added!");
+    ret = i2c_new_master_bus(&i2c_mst_config, &bus_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot init master bus!");
+        while (1);
+    } else {
+        ESP_LOGI(TAG, "Master bus added!");
+    }
 
     // Add CO2 sensor first
     i2c_device_config_t scd41_cfg = {
@@ -71,8 +79,13 @@ void app_main(void)
     };
     // Add CO2 first
     i2c_master_dev_handle_t scd41_handle;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &scd41_cfg, &scd41_handle));
-    ESP_LOGI(TAG, "CO2 sensor device added!");
+    ret = i2c_master_bus_add_device(bus_handle, &scd41_cfg, &scd41_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot add CO2 sensor!");
+        while (1);
+    } else {
+        ESP_LOGI(TAG, "CO2 sensor device added!");
+    }
 
     // Configure BMD680
     i2c_device_config_t bme680_cfg = {
@@ -83,55 +96,85 @@ void app_main(void)
 
     // Add BME680 device second
     i2c_master_dev_handle_t bme680_handle;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle));
-    ESP_LOGI(TAG, "Temperature sensor device added!");
+    ret = i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot add temperature sensor!");
+        while (1);
+    } else {
+        ESP_LOGI(TAG, "Temperature sensor device added!");
+    }
 
-    vTaskDelay(pdMS_TO_TICKS(10000)); // let sensors warm up for 1 second
     ESP_LOGI(TAG, "All devices added! Start communication");
 
     // Communicate with CO2
+    TriesCount = 10;
     uint8_t* buff_wr = communication_buffer;
     uint16_t local_offset = 0;
     int sleep_ms = 30;  // Send cmd and wait 30 ms
-    
-    // local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x36f6);
-    // ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30));
-    // ESP_LOGI(TAG, "CMD Wake Up sent!");
-    // vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
-    // // ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buffer, 2, -1));
+    local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x36f6);
+    while (1) {
+        ret = i2c_master_transmit(scd41_handle, buff_wr, local_offset, 30);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot wake up CO2 sensor! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(2000)); // let sensors warm up for 1 second
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            ESP_LOGI(TAG, "CMD Wake Up sent!");
+            break;
+        }
+    }
     
     // Read serial number
     local_offset = 0; // Reset offset
     local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x3682);
-    
+    TriesCount = 10;
     // Send and receive after a short wait
     uint8_t buff_r[3] = {0};  // Output: serial number
     sleep_ms = 1 * 1000;
-    ESP_ERROR_CHECK(i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms));
-    ESP_LOGI(TAG, "CMD Serial sent!");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
-    
+    while (1) {
+        ret = i2c_master_transmit_receive(scd41_handle, buff_wr, sizeof(buff_wr), buff_r, sizeof(buff_r), sleep_ms);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot get serial number of SO2 sensor! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(2000)); // let sensors warm up for 1 second
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            ESP_LOGI(TAG, "CMD Serial sent!");
+        }
+    }
     // Transform received:
     uint16_t buff_serial[3] = {0};
     sensirion_common_copy_bytes(&buff_r[0], (uint8_t*)buff_serial, (sizeof(buff_serial) * 2));
     // Sensiniron
     ESP_LOGI(TAG, "Sensor serial number is: 0x%x 0x%x 0x%x", (int)buff_serial[0], (int)buff_serial[1], (int)buff_serial[2]);
-    vTaskDelay(pdMS_TO_TICKS(5000)); // let sensors warm up for 1 second
 
     // Start measurement
+    TriesCount = 10;
     local_offset = 0; // Reset offset
     local_offset = sensirion_i2c_add_command16_to_buffer(buff_wr, local_offset, 0x21b1);
-    ESP_ERROR_CHECK(i2c_master_transmit(scd41_handle, buff_wr, local_offset, -1));
-    ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
-
-    vTaskDelay(pdMS_TO_TICKS(30000)); // let sensors warm up for 1 second
-
-    uint16_t co2;
-    float temperature, humidity;
+    ret = i2c_master_transmit(scd41_handle, buff_wr, local_offset, -1);
     while (1) {
-        // Consume measurements with 5 sec interval!
-        xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot start CO2 sensor measurements! Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(2000)); // let sensors warm up for 1 second
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            ESP_LOGI(TAG, "CMD Start measurements sent! Get measumenets in 5 sec intervals");
+        }
     }
+
+    // vTaskDelay(pdMS_TO_TICKS(30000)); // let sensors warm up for 1 second
+    // uint16_t co2;
+    // float temperature, humidity;
+    // while (1) {
+    //     // Consume measurements with 5 sec interval!
+    //     xTaskCreatePinnedToCore(taking_measurements, "CO2 measure task", 8192, NULL, 9, NULL, tskNO_AFFINITY);
+    // }
     
 
 }
