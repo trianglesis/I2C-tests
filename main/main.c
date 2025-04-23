@@ -260,37 +260,45 @@ void bme650_tst(void) {
     // Probe does not work
     // ESP_ERROR_CHECK(i2c_master_probe(bus_handle, BME680_I2C_ADDR_1, -1));
     ESP_LOGI(TAG, "Temperature sensor device added! Wait 5 sec.");
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     // Get chip ID
     uint8_t BME680_REG_ID = 0xd0;
-    uint8_t buff_serial[1] = {0};
-    uint8_t buff_r_serial[1] = {0};  // Output: serial number
-    buff_serial[0] = BME680_REG_ID;
+    uint8_t comm_buffer[9] = {0};
+    uint8_t read_buffer[9] = {0};  // Output: serial number
+    comm_buffer[0] = BME680_REG_ID;
 
-    // ret = i2c_master_transmit_receive(bme680_handle, buff_serial, 1, buff_r_serial, 1, -1);
+    // ret = i2c_master_transmit_receive(bme680_handle, buff_serial, 1, sizeof(buff_r_serial), 1, -1);
     // if (ret != ESP_OK) {
     //     // I (586) i2c_master: Sensor serial number is: 0x61
-    //     ESP_LOGI(TAG, "Sensor serial number is: 0x%x (0x61 = OK)", (int)buff_r_serial[0]);
+    //     ESP_LOGI(TAG, "Transmit-receive failed");
     // }
+
     // Other way
-    // i2c_master_transmit(bme680_handle, buff_serial, 1, -1);
-    // ESP_LOGI(TAG, "Sensor serial register sent! Wait and receive back the ID");
-    // vTaskDelay(pdMS_TO_TICKS(5)); // Sleep 5 sec and receive
-    // i2c_master_receive(bme680_handle, buff_r_serial, 1, -1);
-    // ESP_LOGI(TAG, "Sensor serial number is: 0x%x (0x61 = OK)", (int)buff_r_serial[0]);
+    i2c_master_transmit(bme680_handle, comm_buffer, 1, -1);
+    ESP_LOGI(TAG, "Sensor serial register sent! Wait and receive back the ID");
+    // vTaskDelay(pdMS_TO_TICKS(5));
+    i2c_master_receive(bme680_handle, read_buffer, 1, -1);
 
     // 2nd other way
-    i2c_operation_job_t i2c_ops1[] = {
-        { .command = I2C_MASTER_CMD_START },
-        { .command = I2C_MASTER_CMD_WRITE, .write = { .ack_check = false, .data = (uint8_t *) &BME680_REG_ID, .total_bytes = 1 } },
-        { .command = I2C_MASTER_CMD_START },
-        { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_ACK_VAL, .data = (uint8_t *)buff_r_serial, .total_bytes = 1 } },
-        { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_NACK_VAL, .data = (uint8_t *)(buff_r_serial + 1), .total_bytes = 1 } }, // This must be nack.
-        { .command = I2C_MASTER_CMD_STOP },
-    };
-    i2c_master_execute_defined_operations(bme680_handle, i2c_ops1, sizeof(i2c_ops1) / sizeof(i2c_operation_job_t), -1);
-    ESP_LOGI(TAG, "Sensor serial number is: 0x%x (0x61 = OK)", (int)buff_r_serial[0]);
+    // i2c_operation_job_t i2c_ops1[] = {
+    //     { .command = I2C_MASTER_CMD_START },
+    //     { .command = I2C_MASTER_CMD_WRITE, .write = { .ack_check = false, .data = (uint8_t *) &BME680_REG_ID, .total_bytes = 1 } },
+    //     { .command = I2C_MASTER_CMD_START },
+    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_ACK_VAL, .data = (uint8_t *)buff_r_serial, .total_bytes = 1 } },
+    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_NACK_VAL, .data = (uint8_t *)(buff_r_serial + 1), .total_bytes = 1 } }, // This must be nack.
+    //     { .command = I2C_MASTER_CMD_STOP },
+    // };
+    // i2c_master_execute_defined_operations(bme680_handle, i2c_ops1, sizeof(i2c_ops1) / sizeof(i2c_operation_job_t), -1);
+
+    // Show
+    uint8_t chip_id = 0;
+    chip_id = (int)read_buffer[0];
+    if (chip_id != 0x61) {
+        ESP_LOGE(TAG, "Wrong serial number 0x%x \n\t\t\t(NOT = 0x61)", chip_id);
+    } else {
+        ESP_LOGI(TAG, "Sensor serial number is: 0x%x \n\t\t\t(0x61 = OK)", chip_id);
+    }
 
     // Init
     TriesCount = 1;
