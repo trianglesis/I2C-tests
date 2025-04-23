@@ -35,6 +35,19 @@ i2c_master_dev_handle_t bme680_handle;
 
 
 // Copied from Sensiniron: https://github.com/Sensirion/embedded-i2c-scd4x/blob/455a41c6b7a7a86a55d6647f5fc22d8574572b7b/sensirion_i2c.c#L180
+uint16_t sensirion_i2c_add_command_to_buffer(uint8_t* buffer, uint16_t offset,
+                                             uint16_t command) {
+    buffer[offset++] = (uint8_t)((command & 0xFF00) >> 8);
+    buffer[offset++] = (uint8_t)((command & 0x00FF) >> 0);
+    return offset;
+}
+
+uint16_t sensirion_i2c_add_command8_to_buffer(uint8_t* buffer, uint16_t offset,
+                                              uint8_t command) {
+    buffer[offset++] = command;
+    return offset;
+}
+
 uint16_t sensirion_i2c_add_command16_to_buffer(uint8_t* buffer, uint16_t offset, uint16_t command) {
     buffer[offset++] = (uint8_t)((command & 0xFF00) >> 8);
     buffer[offset++] = (uint8_t)((command & 0x00FF) >> 0);
@@ -266,19 +279,25 @@ void bme650_tst(void) {
     uint8_t BME680_REG_ID = 0xd0;
     uint8_t comm_buffer[9] = {0};
     uint8_t read_buffer[9] = {0};  // Output: serial number
-    comm_buffer[0] = BME680_REG_ID;
-
-    // ret = i2c_master_transmit_receive(bme680_handle, buff_serial, 1, sizeof(buff_r_serial), 1, -1);
-    // if (ret != ESP_OK) {
-    //     // I (586) i2c_master: Sensor serial number is: 0x61
-    //     ESP_LOGI(TAG, "Transmit-receive failed");
-    // }
+    // comm_buffer[0] = BME680_REG_ID;
+    
+    // Sensiniron way
+    uint8_t* buff_wr = communication_buffer;
+    uint16_t local_offset = 0;
+    local_offset = sensirion_i2c_add_command_to_buffer(buff_wr, local_offset, BME680_REG_ID);
+    ret = i2c_master_transmit_receive(bme680_handle, buff_wr, sizeof(buff_wr), read_buffer, sizeof(read_buffer), 50);
+    
+    // ret = i2c_master_transmit_receive(bme680_handle, comm_buffer, 1, read_buffer, 1, -1);
+    if (ret != ESP_OK) {
+        // I (586) i2c_master: Sensor serial number is: 0x61
+        ESP_LOGI(TAG, "Transmit-receive failed");
+    }
 
     // Other way
-    i2c_master_transmit(bme680_handle, comm_buffer, 1, -1);
-    ESP_LOGI(TAG, "Sensor serial register sent! Wait and receive back the ID");
-    // vTaskDelay(pdMS_TO_TICKS(5));
-    i2c_master_receive(bme680_handle, read_buffer, 1, -1);
+    // i2c_master_transmit(bme680_handle, comm_buffer, 1, -1);
+    // ESP_LOGI(TAG, "Sensor serial register sent! Wait and receive back the ID");
+    // // vTaskDelay(pdMS_TO_TICKS(5));
+    // i2c_master_receive(bme680_handle, read_buffer, 1, -1);
 
     // 2nd other way
     // i2c_operation_job_t i2c_ops1[] = {
@@ -300,31 +319,31 @@ void bme650_tst(void) {
         ESP_LOGI(TAG, "Sensor serial number is: 0x%x \n\t\t\t(0x61 = OK)", chip_id);
     }
 
-    // Init
-    TriesCount = 1;
-    uint8_t* buff_wr = malloc(2);
-    uint8_t BME680_REG_RESET = 0xe0;
-    uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
-    int BME680_RESET_PERIOD = 10;      // reset time in ms
+    // // Init
+    // TriesCount = 1;
+    // uint8_t* buff_wr = malloc(2);
+    // uint8_t BME680_REG_RESET = 0xe0;
+    // uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
+    // int BME680_RESET_PERIOD = 10;      // reset time in ms
 
-    buff_wr[0] = BME680_REG_RESET;
-    buff_wr[1] = BME680_RESET_CMD;
+    // buff_wr[0] = BME680_REG_RESET;
+    // buff_wr[1] = BME680_RESET_CMD;
 
-    while (1) {
-        ret = i2c_master_transmit(bme680_handle, buff_wr, 2, 30);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Cannot stop sensor measurements now. Retry: %d", TriesCount);
-            vTaskDelay(pdMS_TO_TICKS(5000));
-            TriesCount--;
-            if (TriesCount == 0)
-                break;
-        } else {
-            ESP_LOGI(TAG, "CMD Stop Measurements sent at start!");
-            vTaskDelay(pdMS_TO_TICKS(BME680_RESET_PERIOD));
-            break;
-        }
-    }
-    free(buff_wr);
+    // while (1) {
+    //     ret = i2c_master_transmit(bme680_handle, buff_wr, 2, 30);
+    //     if (ret != ESP_OK) {
+    //         ESP_LOGE(TAG, "Cannot stop sensor measurements now. Retry: %d", TriesCount);
+    //         vTaskDelay(pdMS_TO_TICKS(5000));
+    //         TriesCount--;
+    //         if (TriesCount == 0)
+    //             break;
+    //     } else {
+    //         ESP_LOGI(TAG, "CMD Stop Measurements sent at start!");
+    //         vTaskDelay(pdMS_TO_TICKS(BME680_RESET_PERIOD));
+    //         break;
+    //     }
+    // }
+    // free(buff_wr);
 
 }
 
