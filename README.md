@@ -527,6 +527,12 @@ I (56577) main_task: Returned from app_main()
 
 Usign the same logic to add sensor to master bus:
 
+Problems:
+
+I see unexpected `nack` for a valid register read, such as getting chip id:
+
+- Seems like this https://esp32.com/viewtopic.php?t=45303
+
 ```cpp
     // Configure BMD680
     i2c_device_config_t bme680_cfg = {

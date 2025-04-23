@@ -257,23 +257,32 @@ void bme650_tst(void) {
         while (1);
     }
     
-    ESP_LOGI(TAG, "Temperature sensor device added! Wait 5 seconds.");
+    // Probe does not work
+    // ESP_ERROR_CHECK(i2c_master_probe(bus_handle, BME680_I2C_ADDR_1, -1));
+    ESP_LOGI(TAG, "Temperature sensor device added! Wait 5 sec.");
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     // Get chip ID
     uint8_t BME680_REG_ID = 0xd0;
-    uint8_t* buff_serial = malloc(1);
+    uint8_t buff_serial[1] = {0};
     uint8_t buff_r_serial[1] = {0};  // Output: serial number
     buff_serial[0] = BME680_REG_ID;
-    ret = i2c_master_transmit_receive(bme680_handle, buff_serial, 1, buff_r_serial, 1, 50);
-    if (ret != ESP_OK) {
-        // I (586) i2c_master: Sensor serial number is: 0x61
-        ESP_LOGI(TAG, "Sensor serial number is: 0x%x", (int)buff_r_serial[0]);
-    }
-    free(buff_serial);
+
+    // ret = i2c_master_transmit_receive(bme680_handle, buff_serial, 1, buff_r_serial, 1, -1);
+    // if (ret != ESP_OK) {
+    //     // I (586) i2c_master: Sensor serial number is: 0x61
+    //     ESP_LOGI(TAG, "Sensor serial number is: 0x%x (0x61 = OK)", (int)buff_r_serial[0]);
+    // }
+    // Other way
+    i2c_master_transmit(bme680_handle, buff_serial, 1, -1);
+    ESP_LOGI(TAG, "Sensor serial register sent! Wait and receive back the ID");
+    vTaskDelay(pdMS_TO_TICKS(5)); // Sleep 5 sec and receive
+    i2c_master_receive(bme680_handle, buff_r_serial, 1, -1);
+    ESP_LOGI(TAG, "Sensor serial number is: 0x%x (0x61 = OK)", (int)buff_r_serial[0]);
+
 
     // Init
-    TriesCount = 3;
+    TriesCount = 1;
     uint8_t* buff_wr = malloc(2);
     uint8_t BME680_REG_RESET = 0xe0;
     uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
