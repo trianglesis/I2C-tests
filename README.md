@@ -527,11 +527,6 @@ I (56577) main_task: Returned from app_main()
 
 Usign the same logic to add sensor to master bus:
 
-Problems:
-
-I see unexpected `nack` for a valid register read, such as getting chip id:
-
-- Seems like this https://esp32.com/viewtopic.php?t=45303
 
 ```cpp
     // Configure BMD680
@@ -647,3 +642,17 @@ Trying to read serial first: it works.
 
 Trying to send to REG `BME680_REG_RESET` and CMD `BME680_RESET_CMD`: 
 - `E (596) i2c.master: I2C transaction unexpected nack detected`
+
+Problems:
+
+I see unexpected `nack` for a valid register read, such as getting chip id:
+
+- Seems like this 
+  - https://esp32.com/viewtopic.php?t=45303
+  - https://github.com/espressif/esp-idf/issues/14715
+
+Solution:
+- Use custom: `i2c_master_execute_defined_operations`
+  - https://github.com/espressif/esp-idf/issues/14715#issuecomment-2586353494
+  - [doc](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#_CPPv437i2c_master_execute_defined_operations23i2c_master_dev_handle_tP19i2c_operation_job_t6size_ti)
+
