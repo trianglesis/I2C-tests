@@ -585,6 +585,7 @@ i2c-tools> i2cdump -c 0x77
 
 Now test registers as per datasheet.
 As I understand, I can `set` to register ADDR some cmd. Will see if I can set it manually.
+Using `i2cset` must be pretty similar to `i2c_master_transmit` I just need to understand how should I pass `REG` address and `CMD_DATA` in this call.
 
 
 Set: `i2cset --chip=0x77 --register=REG_ADDR DATA_CMD`
@@ -617,3 +618,26 @@ i2c-tools> i2cget --chip=0x77 --register=0xd0 --length=1
 i2c-tools> i2cget --chip=0x77 --register=0xe0 --length=1
 0x00
 ```
+
+According to example to a new I2C driver reg address and CMD data comes to one buffer:
+
+```cpp
+// Buffer allocation. Len of data args + 1 for reg addres at the start
+uint8_t *data = malloc(len + 1);
+// Adding REG address to the start
+data[0] = data_addr;
+// Add each element of the DATA_CMD into a buffer
+for (int i = 0; i < len; i++) {
+    data[i + 1] = i2cset_args.data->ival[i];
+}
+// When all data added - just send it
+esp_err_t ret = i2c_master_transmit(dev_handle, data, len + 1, I2C_TOOL_TIMEOUT_VALUE_MS);
+
+```
+
+Trying to read serial first: it works.
+- Similar to: `i2cget --chip=0x77 --register=0xd0 --length=1`
+- But still it shows `unexpected nack detected`
+
+Trying to send to REG `BME680_REG_RESET` and CMD `BME680_RESET_CMD`: 
+- `E (596) i2c.master: I2C transaction unexpected nack detected`
