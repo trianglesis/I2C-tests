@@ -62,12 +62,12 @@ abort() was called at PC 0x4080b6d1 on core 0
 See datasheet.
 Address: `0x77`
 
-
 There is also a driver for `BME680` from the same repo, but again, it relies on an old `I2C` driver and there are issues with this driver:
 
 - [ESP IDF Lib (old)](https://github.com/UncleRus/esp-idf-lib/blob/a02cd6bb5190cab379125140780adcb8d88f9650/components/bme680)
 - [issue](https://github.com/UncleRus/esp-idf-lib/issues/609)
 - [old driver](https://github.com/UncleRus/esp-idf-lib/issues/667)
+- [Datasheet](https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme680-ds001.pdf)
 
 ## Test and discover
 
@@ -134,6 +134,8 @@ Probably need to check PINs with names:
 
 
 ### Conf
+
+# For SCD4x aka CO2 sensor
 
 Config device or two
 
@@ -518,4 +520,100 @@ I (51577) i2c_master: RAW Measurements ready co2: 1442, t: 26729 C Humidity: 0 (
 I (56577) i2c_master: RAW Measurements ready co2: 1461, t: 48233 C Humidity: 0 (raw value)
 I (56577) i2c_master: Stop measurements.
 I (56577) main_task: Returned from app_main()
+```
+
+
+# For bme680 aka temp, humidity, pressure, AIQ sensor
+
+Usign the same logic to add sensor to master bus:
+
+```cpp
+    // Configure BMD680
+    i2c_device_config_t bme680_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = BME680_I2C_ADDR_1,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+```
+
+Now start digging the controls:
+
+## Init and reset
+
+There are two parts for sensor to init with: `register` and `command`:
+
+```cpp
+    uint8_t BME680_REG_RESET = 0xe0;
+    uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
+```
+
+It seems pretty similar to what we can test with `i2c_tools`, I'll probe the registers to see how it works.
+
+- `i2cget -c 0x77`
+- `i2cset -c 0x77`
+- `i2cdump -c 0x77`
+
+```shell
+i2c-tools> i2cconfig  --port=0 --freq=100000 --sda=22 --scl=23
+i2c-tools> i2cdetect
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00: 00 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- 62 -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- 77 -- -- -- -- -- -- -- --
+i2c-tools> i2cget -c 0x77
+0x80
+i2c-tools> i2cset -c 0x77
+I (169704) cmd_i2ctools: Write OK
+i2c-tools> i2cdump -c 0x77
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
+00: 29 aa 16 4b e3 00 32 10 00 00 01 00 0e 00 02 04    )??K?.2?..?.?.??
+10: 10 00 40 00 80 00 1e 00 1f 7f 1f 10 00 00 00 80    ?.@.?.?.????...?
+20: 00 00 80 00 00 80 00 80 00 00 00 04 00 04 00 00    ..?..?.?...?.?..
+30: 80 00 00 80 00 00 80 00 80 00 00 00 04 00 04 00    ?..?..?.?...?.?.
+40: 00 80 00 00 80 00 00 80 00 80 00 00 00 04 00 04    .?..?..?.?...?.?
+50: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+70: 00 00 00 00 00 00 00 00 0f 04 fe 16 9b 08 00 ff    ........??????..
+```
+
+### Manually pull\push registers
+
+Now test registers as per datasheet.
+As I understand, I can `set` to register ADDR some cmd. Will see if I can set it manually.
+
+
+Set: `i2cset --chip=0x77 --register=REG_ADDR DATA_CMD`
+
+```shell
+i2cset --chip=0x77 --register=0xe0 0xb6
+```
+
+And results:
+
+```log
+i2c-tools> i2cset --chip=0x77 --register=0xe0 0xb6
+I (575724) cmd_i2ctools: Write OK
+```
+
+Get: `i2cget --chip=0x77 --register=REG_ADDR --length=1`
+
+Chip ID: `BME680_REG_ID 0xd0` must be `0x61` = OK
+
+```shell
+i2cget --chip=0x77 --register=0xd0 --length=1
+i2cget --chip=0x77 --register=0xe0 --length=1
+```
+
+And results:
+
+```log
+i2c-tools> i2cget --chip=0x77 --register=0xd0 --length=1
+0x61
+i2c-tools> i2cget --chip=0x77 --register=0xe0 --length=1
+0x00
 ```

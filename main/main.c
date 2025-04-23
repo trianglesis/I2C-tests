@@ -7,8 +7,8 @@
 
 #define I2C_PORT 0
 
-#define COMMON_SDA_PIN 22
-#define COMMON_SCL_PIN 23
+#define COMMON_SDA_PIN 0
+#define COMMON_SCL_PIN 1
 
 #define SCD4X_I2C_ADDR 0x62     // this
 #define BME680_I2C_ADDR_0 0x76
@@ -27,6 +27,9 @@ static uint8_t communication_buffer[9] = {0};
 
 #define CMD_WAKE_UP                                (0x36F6)
 
+// Main BUS
+i2c_master_bus_handle_t bus_handle;
+// Devices handles after they were added to main BUS
 i2c_master_dev_handle_t scd41_handle;
 i2c_master_dev_handle_t bme680_handle;
 
@@ -49,29 +52,9 @@ uint16_t sensirion_common_bytes_to_uint16_t(const uint8_t* bytes) {
     return (uint16_t)bytes[0] << 8 | (uint16_t)bytes[1];
 }
 
-void app_main(void)
-{
+void co2_sensor_tst(void) {
     esp_err_t ret;
     uint16_t TriesCount = 10;
-
-    // New I2C bus setup, new driver used, from IDF 5.4+
-    i2c_master_bus_config_t i2c_mst_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = I2C_PORT,
-        .scl_io_num = COMMON_SCL_PIN,
-        .sda_io_num = COMMON_SDA_PIN,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-
-    i2c_master_bus_handle_t bus_handle;
-    ret = i2c_new_master_bus(&i2c_mst_config, &bus_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Cannot init master bus!");
-        while (1);
-    } else {
-        ESP_LOGI(TAG, "Master bus added!");
-    }
 
     // Add CO2 sensor first
     i2c_device_config_t scd41_cfg = {
@@ -87,24 +70,6 @@ void app_main(void)
     } else {
         ESP_LOGI(TAG, "CO2 sensor device added!");
     }
-
-    // Configure BMD680
-    i2c_device_config_t bme680_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = BME680_I2C_ADDR_1,
-        .scl_speed_hz = I2C_FREQ_HZ,
-    };
-
-    // Add BME680 device second
-    ret = i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Cannot add temperature sensor!");
-        while (1);
-    } else {
-        ESP_LOGI(TAG, "Temperature sensor device added!");
-    }
-
-    ESP_LOGI(TAG, "All devices added! Start communication");
 
     // Stop sensor!
     TriesCount = 100;
@@ -225,6 +190,9 @@ void app_main(void)
     // 
     uint8_t* buff_wr_measurements = communication_buffer;
     uint8_t* buff_r_measurements = communication_buffer;
+
+    uint16_t co2;
+    float temperature, humidity;
     // Dumb loop to collect a few measurements
     while (1) {
         local_offset = 0; // Reset offset
@@ -251,6 +219,11 @@ void app_main(void)
                 humidityRaw = sensirion_common_bytes_to_uint16_t(&buff_r_measurements[4]);
                 ESP_LOGI(TAG, "RAW Measurements ready co2: %d, t: %ld C Humidity: %ld (raw value)", co2Raw, temperatureRaw, humidityRaw);
                 
+                co2 = co2Raw;
+                temperature = (float)temperatureRaw * 175.0f / 65536.0f - 45.0f;
+                humidity = (float)humidityRaw * 100.0f / 65536.0f;
+                ESP_LOGI(TAG, "Measurements ready co2: %u ppm, t: %.2f °C Humidity: %.2f %%", co2, temperature, humidity);
+
                 // uint16_t temperature;
                 // uint16_t humidity;
                 // temperatureRaw = ((21875 * (int32_t)temperature) >> 13) - 45000;
@@ -261,6 +234,84 @@ void app_main(void)
             }
         }
     }
+}
 
+void bme650_tst(void) {
+    esp_err_t ret;
+    uint16_t TriesCount = 0;
+    TriesCount = 10;  // Unused is now used
+    
+    ESP_LOGI(TAG, "Adding BME680...");
+    
+    // Configure BMD680
+    i2c_device_config_t bme680_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = BME680_I2C_ADDR_1,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+
+    // Add BME680 device second
+    ret = i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot add temperature sensor!");
+        while (1);
+    }
+    
+    ESP_LOGI(TAG, "Temperature sensor device added!");
+
+    // Init
+    TriesCount = 100;
+    uint8_t* buff_wr = communication_buffer;
+    uint16_t local_offset = 0;
+
+    uint8_t BME680_REG_RESET = 0xe0;
+    uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
+    
+    while (1) {
+        ret = i2c_master_transmit(bme680_handle, BME680_RESET_CMD, 1, 30);
+        ret = i2c_master_transmit(bme680_handle, BME680_REG_RESET, 1, 30);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot stop sensor measurements now. Retry: %d", TriesCount);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            TriesCount--;
+            if (TriesCount == 0)
+                break;
+        } else {
+            ESP_LOGI(TAG, "CMD Stop Measurements sent at start! Wait 5 sec!");
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            break;
+        }
+    }
+
+}
+
+void app_main(void)
+{
+    esp_err_t ret;
+    // New I2C bus setup, new driver used, from IDF 5.4+
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_PORT,
+        .scl_io_num = COMMON_SCL_PIN,
+        .sda_io_num = COMMON_SDA_PIN,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+
+    ret = i2c_new_master_bus(&i2c_mst_config, &bus_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot init master bus!");
+        while (1);
+    } else {
+        ESP_LOGI(TAG, "Master bus added!");
+    }
+
+    ESP_LOGI(TAG, "I2C Bus is ready - now add devices!");
+
+    // CO2 test
+    // co2_sensor_tst();
+
+    // Temp and humidity bosh
+    bme650_tst();
 
 }
