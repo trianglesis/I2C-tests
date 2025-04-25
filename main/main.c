@@ -521,6 +521,34 @@ void app_main(void)
         ESP_LOGE(TAG, "Cannot init master bus!");
     }
 
+
+    // Add CO2 sensor first
+    i2c_device_config_t scd41_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = SCD4X_I2C_ADDR,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+    // Add CO2 first
+    ret = i2c_master_bus_add_device(bus_handle, &scd41_cfg, &scd41_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot add CO2 sensor!");
+        while (1);
+    } else {
+        ESP_LOGI(TAG, "CO2 sensor device added!");
+    }
+
+    // Probe CO2
+    ret =  i2c_master_probe(bus_handle, SCD4X_I2C_ADDR, 500);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Probe tested CO2, OK!");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "ESP_ERR_NOT_FOUND: I2C probe failed, doesn't find the device with specific address you gave.");
+    } else if (ret == ESP_ERR_TIMEOUT) {
+        ESP_LOGE(TAG, "ESP_ERR_TIMEOUT: Operation timeout(larger than xfer_timeout_ms) because the bus is busy or hardware crash.");
+    } else {
+        ESP_LOGE(TAG, "Unexpected CO2, FAIL!");
+    }
+
     ESP_LOGI(TAG, "Adding BME680...");
     
     // Configure BMD680

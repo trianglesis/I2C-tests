@@ -662,3 +662,36 @@ Solution:
   - https://github.com/espressif/esp-idf/issues/14715#issuecomment-2586353494
   - [doc](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/i2c.html#_CPPv437i2c_master_execute_defined_operations23i2c_master_dev_handle_tP19i2c_operation_job_t6size_ti)
 
+### HOW IS THIS EVEN possible???
+
+I2C Test
+
+```log
+I (1235) main_task: Returned from app_main()
+i2c-tools> i2cdetect
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00: 00 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- 62 -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- 77 -- -- -- -- -- -- -- --
+```
+
+Current project:
+
+```log
+I (466) main_task: Started on CPU0
+I (466) main_task: Calling app_main()
+D (466) i2c.common: new bus(0) at 0x40811950
+D (476) i2c.common: bus clock source frequency: 40000000hz
+I (476) i2c-test-device: I2C Bus is ready - now add devices!
+I (986) i2c-test-device: CO2 sensor device added!
+E (986) i2c-test-device: ESP_ERR_NOT_FOUND: I2C probe failed, doesn't find the device with specific address you gave.
+I (986) i2c-test-device: Adding BME680...
+I (986) i2c-test-device: Added BME680 sensor! Now wait!
+E (1496) i2c-test-device: ESP_ERR_NOT_FOUND: I2C probe failed, doesn't find the device with specific address you gave.
+I (1496) main_task: Returned from app_main()
+```
