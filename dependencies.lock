@@ -1,0 +1,17 @@
+dependencies:
+  idf:
+    source:
+      type: idf
+    version: 5.4.1
+  k0i05/esp_type_utils:
+    dependencies: []
+    source:
+      path: D:\Projects\ESP\projects\ESP32-C6\I2C-tests
+      type: local
+    version: '*'
+direct_dependencies:
+- idf
+- k0i05/esp_type_utils
+manifest_hash: 89ffc571d360622bc1280d3ac8f235b213ed251bac38eace08377cbf5e2602b7
+target: esp32c6
+version: 2.0.0

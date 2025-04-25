@@ -589,18 +589,7 @@ As I understand, I can `set` to register ADDR some cmd. Will see if I can set it
 Using `i2cset` must be pretty similar to `i2c_master_transmit` I just need to understand how should I pass `REG` address and `CMD_DATA` in this call.
 
 
-Set: `i2cset --chip=0x77 --register=REG_ADDR DATA_CMD`
-
-```shell
-i2cset --chip=0x77 --register=0xe0 0xb6
-```
-
-And results:
-
-```log
-i2c-tools> i2cset --chip=0x77 --register=0xe0 0xb6
-I (575724) cmd_i2ctools: Write OK
-```
+#### Get | read
 
 Get: `i2cget --chip=0x77 --register=REG_ADDR --length=1`
 
@@ -620,6 +609,21 @@ i2c-tools> i2cget --chip=0x77 --register=0xe0 --length=1
 0x00
 ```
 
+#### Set | write
+
+Set: `i2cset --chip=0x77 --register=REG_ADDR DATA_CMD`
+
+```shell
+i2cset --chip=0x77 --register=0xe0 0xb6
+```
+
+And results:
+
+```log
+i2c-tools> i2cset --chip=0x77 --register=0xe0 0xb6
+I (575724) cmd_i2ctools: Write OK
+```
+
 According to example to a new I2C driver reg address and CMD data comes to one buffer:
 
 ```cpp
@@ -635,6 +639,8 @@ for (int i = 0; i < len; i++) {
 esp_err_t ret = i2c_master_transmit(dev_handle, data, len + 1, I2C_TOOL_TIMEOUT_VALUE_MS);
 
 ```
+
+#### In code
 
 Trying to read serial first: it works.
 - Similar to: `i2cget --chip=0x77 --register=0xd0 --length=1`

@@ -5,7 +5,9 @@
 #include <freertos/task.h>
 #include "driver/i2c_master.h"
 
-#define I2C_PORT 0
+#include <bme680.h>
+
+#define I2C_PORT -1  // Auto select
 
 #define COMMON_SDA_PIN 0
 #define COMMON_SCL_PIN 1
@@ -21,7 +23,7 @@
 // only define xCoreID CORE1 as 1 if this is a multiple core processor target, else define it as tskNO_AFFINITY
 #define CORE1       ((CONFIG_FREERTOS_NUMBER_OF_CORES > 1) ? 1 : tskNO_AFFINITY)
 
-static const char *TAG = "i2c_master";
+static const char *TAG = "i2c-test-device";
 
 static uint8_t communication_buffer[9] = {0};
 
@@ -64,6 +66,7 @@ void sensirion_common_copy_bytes(const uint8_t* source, uint8_t* destination, ui
 uint16_t sensirion_common_bytes_to_uint16_t(const uint8_t* bytes) {
     return (uint16_t)bytes[0] << 8 | (uint16_t)bytes[1];
 }
+
 
 void co2_sensor_tst(void) {
     esp_err_t ret;
@@ -195,7 +198,7 @@ void co2_sensor_tst(void) {
     }
 
     // Get measurements
-    TriesCount = 30;
+    TriesCount = 5;
     uint16_t MeasuresCount = 10;
     uint16_t co2Raw;         // ppm
     int32_t temperatureRaw;  // millicelsius
@@ -249,6 +252,138 @@ void co2_sensor_tst(void) {
     }
 }
 
+
+static inline void print_registers(bme680_handle_t handle) {
+    /* configuration registers */
+    bme680_control_measurement_register_t ctrl_meas_reg;
+    bme680_control_humidity_register_t    ctrl_humi_reg;
+    bme680_config_register_t              config_reg;
+    bme680_control_gas0_register_t        ctrl_gas0_reg;
+    bme680_control_gas1_register_t        ctrl_gas1_reg;
+
+    /* attempt to read control humidity register */
+    bme680_get_control_humidity_register(handle, &ctrl_humi_reg);
+
+    /* attempt to read control measurement register */
+    bme680_get_control_measurement_register(handle, &ctrl_meas_reg);
+
+    /* attempt to read configuration register */
+    bme680_get_configuration_register(handle, &config_reg);
+
+    /* attempt to read control gas 0 register */
+    bme680_get_control_gas0_register(handle, &ctrl_gas0_reg);
+
+    /* attempt to read control gas 1 register */
+    bme680_get_control_gas1_register(handle, &ctrl_gas1_reg);
+
+    ESP_LOGI(TAG, "Variant Id          (0x%02x): %s", handle->variant_id,uint8_to_binary(handle->variant_id));
+    ESP_LOGI(TAG, "Configuration       (0x%02x): %s", config_reg.reg,    uint8_to_binary(config_reg.reg));
+    ESP_LOGI(TAG, "Control Measurement (0x%02x): %s", ctrl_meas_reg.reg, uint8_to_binary(ctrl_meas_reg.reg));
+    ESP_LOGI(TAG, "Control Humidity    (0x%02x): %s", ctrl_humi_reg.reg, uint8_to_binary(ctrl_humi_reg.reg));
+    ESP_LOGI(TAG, "Control Gas 0       (0x%02x): %s", ctrl_gas0_reg.reg, uint8_to_binary(ctrl_gas0_reg.reg));
+    ESP_LOGI(TAG, "Control Gas 1       (0x%02x): %s", ctrl_gas1_reg.reg, uint8_to_binary(ctrl_gas1_reg.reg));
+}
+
+void bme650_alt(void) {
+    esp_err_t ret;
+
+    // bus_handle is already init
+
+    // initialize the xLastWakeTime variable with the current time.
+    TickType_t          last_wake_time  = xTaskGetTickCount ();
+    //
+    // initialize i2c device configuration
+    bme680_config_t dev_cfg         = I2C_BME680_CONFIG_DEFAULT;
+    bme680_handle_t dev_hdl;
+    //
+    // init device
+    bme680_init(bus_handle, &dev_cfg, &dev_hdl);
+    if (dev_hdl == NULL) {
+        ESP_LOGE(TAG, "bme680 handle init failed");
+        assert(dev_hdl);
+    }
+    
+    print_registers(dev_hdl);
+
+    // task loop entry point
+    for ( ;; ) {
+        ESP_LOGI(TAG, "######################## BME680 - START #########################");
+        
+        // handle sensor
+
+        esp_err_t result;
+        /*
+        bme680_data_t data;
+        
+        result = bme680_get_data(dev_hdl, &data);
+        if(result != ESP_OK) {
+            ESP_LOGE(TAG, "bme680 device read failed (%s)", esp_err_to_name(result));
+        } else {
+            ESP_LOGI(TAG, "air temperature:     %.2f °C", data.air_temperature);
+            ESP_LOGI(TAG, "dewpoint temperature:%.2f °C", data.dewpoint_temperature);
+            ESP_LOGI(TAG, "relative humidity:   %.2f %%", data.relative_humidity);
+            ESP_LOGI(TAG, "barometric pressure: %.2f hPa", data.barometric_pressure/100);
+            ESP_LOGI(TAG, "gas resistance(%u):   %.2f kΩ", data.gas_index, data.gas_resistance/1000);
+            ESP_LOGI(TAG, "iaq score:           %u (%s)", data.iaq_score, bme680_air_quality_to_string(data.iaq_score));
+            ESP_LOGI(TAG, "heater is stable:    %s", data.heater_stable ? "yes" : "no");
+            ESP_LOGI(TAG, "gas range:           %u", data.gas_range);
+            ESP_LOGI(TAG, "gas valid:           %s", data.gas_valid ? "yes" : "no");
+        }
+        */
+
+        //bme680_data_t data[BME680_HEATER_PROFILE_SIZE];
+        //result = bme680_get_data2(dev_hdl, data);
+        //if(result != ESP_OK) {
+        //    ESP_LOGE(TAG, "bme680 device read failed (%s)", esp_err_to_name(result));
+        //}
+
+        ESP_LOGI(TAG, "Index Air(°C) Dew-Point(°C) Humidity(%%) Pressure(hPa) Gas-Resistance(kΩ) Gas-Range Gas-Valid Gas-Index Heater-Stable IAQ-Score");
+
+        for(uint8_t i = 0; i < dev_hdl->dev_config.heater_profile_size; i++) {
+            bme680_data_t data;
+            result = bme680_get_data_by_heater_profile(dev_hdl, i, &data);
+            if(result != ESP_OK) {
+                ESP_LOGE(TAG, "bme680 device read failed (%s)", esp_err_to_name(result));
+            }
+            ESP_LOGI(TAG, "%u    %.2f    %.2f          %.2f         %.2f          %.2f               %u        %s        %u        %s            %u (%s)",
+                i,
+                data.air_temperature,
+                data.dewpoint_temperature,
+                data.relative_humidity,
+                data.barometric_pressure/100,
+                data.gas_resistance/1000,
+                data.gas_range,
+                data.gas_valid ? "yes" : "no",
+                data.gas_index,
+                data.heater_stable ? "yes" : "no",
+                data.iaq_score, bme680_air_quality_to_string(data.iaq_score));
+
+            /*
+            ESP_LOGI(TAG, "(%u) air temperature:     %.2f °C", i, data.air_temperature);
+            ESP_LOGI(TAG, "(%u) dewpoint temperature:%.2f °C", i, data.dewpoint_temperature);
+            ESP_LOGI(TAG, "(%u) relative humidity:   %.2f %%", i, data.relative_humidity);
+            ESP_LOGI(TAG, "(%u) barometric pressure: %.2f hPa", i, data.barometric_pressure/100);
+            ESP_LOGI(TAG, "(%u) gas resistance(%u):   %.2f kΩ", i, data.gas_index, data.gas_resistance/1000);
+            ESP_LOGI(TAG, "(%u) gas range(%u):        %u", i, data.gas_index, data.gas_range);
+            ESP_LOGI(TAG, "(%u) gas valid(%u):        %s", i, data.gas_index, data.gas_valid ? "yes" : "no");
+            ESP_LOGI(TAG, "(%u) heater is stable:    %s", i, data.heater_stable ? "yes" : "no");
+            ESP_LOGI(TAG, "(%u) iaq score:           %u (%s)", i, data.iaq_score, bme680_air_quality_to_string(data.iaq_score));
+            */
+            vTaskDelay(pdMS_TO_TICKS(250));
+        }
+        
+        ESP_LOGI(TAG, "######################## BME680 - END ###########################");
+        //
+        //
+        // pause the task per defined wait period
+        xTaskDelayUntil( &last_wake_time, I2C0_TASK_SAMPLING_RATE );
+    }
+    //
+    // free resources
+    bme680_delete( dev_hdl );
+    vTaskDelete( NULL );
+} 
+
 void bme650_tst(void) {
     esp_err_t ret;
     uint16_t TriesCount = 0;
@@ -265,33 +400,46 @@ void bme650_tst(void) {
 
     // Add BME680 device second
     ret = i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle);
-    if (ret != ESP_OK) {
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Added BME680 sensor! Now wait!");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    } else if (ret == ESP_ERR_INVALID_ARG) {
+        ESP_LOGE(TAG, "ESP_ERR_INVALID_ARG: I2C bus initialization failed because of invalid argument.");
+    } else if (ret == ESP_ERR_NO_MEM) {
+        ESP_LOGE(TAG, "ESP_ERR_NO_MEM: Create I2C bus failed because of out of memory.");
+    } else {
         ESP_LOGE(TAG, "Cannot add temperature sensor!");
-        while (1);
     }
     
     // Probe does not work
-    // ESP_ERROR_CHECK(i2c_master_probe(bus_handle, BME680_I2C_ADDR_1, -1));
-    ESP_LOGI(TAG, "Temperature sensor device added! Wait 5 sec.");
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    ret =  i2c_master_probe(bus_handle, BME680_I2C_ADDR_1, 50);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Probe tested BME680, OK!");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "ESP_ERR_NOT_FOUND: I2C probe failed, doesn't find the device with specific address you gave.");
+    } else if (ret == ESP_ERR_TIMEOUT) {
+        ESP_LOGE(TAG, "ESP_ERR_TIMEOUT: Operation timeout(larger than xfer_timeout_ms) because the bus is busy or hardware crash.");
+    } else {
+        ESP_LOGE(TAG, "Unexpected BME680, FAIL!");
+    }
 
     // Get chip ID
-    uint8_t BME680_REG_ID = 0xd0;
-    uint8_t comm_buffer[9] = {0};
-    uint8_t read_buffer[9] = {0};  // Output: serial number
-    // comm_buffer[0] = BME680_REG_ID;
+    // uint8_t BME680_REG_ID = 0xd0;
+    // uint8_t read_buffer[2] = {0};  // Output: serial number
     
     // Sensiniron way
-    uint8_t* buff_wr = communication_buffer;
-    uint16_t local_offset = 0;
-    local_offset = sensirion_i2c_add_command_to_buffer(buff_wr, local_offset, BME680_REG_ID);
-    ret = i2c_master_transmit_receive(bme680_handle, buff_wr, sizeof(buff_wr), read_buffer, sizeof(read_buffer), 50);
+    // uint8_t* buff_wr = communication_buffer;
+    // uint16_t local_offset = 0;
+    // local_offset = sensirion_i2c_add_command_to_buffer(buff_wr, local_offset, BME680_REG_ID);
+    // ret = i2c_master_transmit_receive(bme680_handle, buff_wr, sizeof(buff_wr), read_buffer, sizeof(read_buffer), 50);
     
+    // uint8_t comm_buffer[1] = {0};
+    // comm_buffer[0] = BME680_REG_ID;
     // ret = i2c_master_transmit_receive(bme680_handle, comm_buffer, 1, read_buffer, 1, -1);
-    if (ret != ESP_OK) {
-        // I (586) i2c_master: Sensor serial number is: 0x61
-        ESP_LOGI(TAG, "Transmit-receive failed");
-    }
+    // if (ret != ESP_OK) {
+    //     // I (586) i2c_master: Sensor serial number is: 0x61
+    //     ESP_LOGI(TAG, "Transmit-receive failed");
+    // }
 
     // Other way
     // i2c_master_transmit(bme680_handle, comm_buffer, 1, -1);
@@ -304,33 +452,31 @@ void bme650_tst(void) {
     //     { .command = I2C_MASTER_CMD_START },
     //     { .command = I2C_MASTER_CMD_WRITE, .write = { .ack_check = false, .data = (uint8_t *) &BME680_REG_ID, .total_bytes = 1 } },
     //     { .command = I2C_MASTER_CMD_START },
-    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_ACK_VAL, .data = (uint8_t *)buff_r_serial, .total_bytes = 1 } },
-    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_NACK_VAL, .data = (uint8_t *)(buff_r_serial + 1), .total_bytes = 1 } }, // This must be nack.
+    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_ACK_VAL, .data = (uint8_t *)read_buffer, .total_bytes = 1 } },
+    //     { .command = I2C_MASTER_CMD_READ, .read = { .ack_value = I2C_NACK_VAL, .data = (uint8_t *)(read_buffer + 1), .total_bytes = 1 } }, // This must be nack.
     //     { .command = I2C_MASTER_CMD_STOP },
     // };
     // i2c_master_execute_defined_operations(bme680_handle, i2c_ops1, sizeof(i2c_ops1) / sizeof(i2c_operation_job_t), -1);
 
     // Show
-    uint8_t chip_id = 0;
-    chip_id = (int)read_buffer[0];
-    if (chip_id != 0x61) {
-        ESP_LOGE(TAG, "Wrong serial number 0x%x \n\t\t\t(NOT = 0x61)", chip_id);
-    } else {
-        ESP_LOGI(TAG, "Sensor serial number is: 0x%x \n\t\t\t(0x61 = OK)", chip_id);
-    }
+    // if (read_buffer[0] != 0x61) {
+    //     ESP_LOGE(TAG, "Wrong serial number 0x%x \n\t\t\t(NOT = 0x61)", read_buffer[0]);
+    // } else {
+    //     ESP_LOGI(TAG, "Sensor serial number is: 0x%x \n\t\t\t(0x61 = OK)", read_buffer[0]);
+    // }
 
     // // Init
     // TriesCount = 1;
-    // uint8_t* buff_wr = malloc(2);
+    // uint8_t* buff_wr_reset = malloc(2);
     // uint8_t BME680_REG_RESET = 0xe0;
     // uint8_t BME680_RESET_CMD = 0xb6;    // BME680_REG_RESET<7:0>
     // int BME680_RESET_PERIOD = 10;      // reset time in ms
 
-    // buff_wr[0] = BME680_REG_RESET;
-    // buff_wr[1] = BME680_RESET_CMD;
+    // buff_wr_reset[0] = BME680_REG_RESET;
+    // buff_wr_reset[1] = BME680_RESET_CMD;
 
     // while (1) {
-    //     ret = i2c_master_transmit(bme680_handle, buff_wr, 2, 30);
+    //     ret = i2c_master_transmit(bme680_handle, buff_wr_reset, 2, 30);
     //     if (ret != ESP_OK) {
     //         ESP_LOGE(TAG, "Cannot stop sensor measurements now. Retry: %d", TriesCount);
     //         vTaskDelay(pdMS_TO_TICKS(5000));
@@ -343,9 +489,9 @@ void bme650_tst(void) {
     //         break;
     //     }
     // }
-    // free(buff_wr);
 
 }
+
 
 void app_main(void)
 {
@@ -360,20 +506,61 @@ void app_main(void)
         .flags.enable_internal_pullup = true,
     };
 
+    i2c_master_bus_handle_t bus_handle;
     ret = i2c_new_master_bus(&i2c_mst_config, &bus_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Cannot init master bus!");
-        while (1);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "I2C Bus is ready - now add devices!");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    } else if (ret == ESP_ERR_INVALID_ARG) {
+        ESP_LOGE(TAG, "ESP_ERR_INVALID_ARG: I2C bus initialization failed because of invalid argument!");
+    } else if (ret == ESP_ERR_NO_MEM) {
+        ESP_LOGE(TAG, "ESP_ERR_NO_MEM: Create I2C bus failed because of out of memory.");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "ESP_ERR_NOT_FOUND: No more free bus. ");
     } else {
-        ESP_LOGI(TAG, "Master bus added!");
+        ESP_LOGE(TAG, "Cannot init master bus!");
     }
 
-    ESP_LOGI(TAG, "I2C Bus is ready - now add devices!");
+    ESP_LOGI(TAG, "Adding BME680...");
+    
+    // Configure BMD680
+    i2c_device_config_t bme680_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = BME680_I2C_ADDR_1,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+
+    // Add BME680 device second
+    ret = i2c_master_bus_add_device(bus_handle, &bme680_cfg, &bme680_handle);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Added BME680 sensor! Now wait!");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    } else if (ret == ESP_ERR_INVALID_ARG) {
+        ESP_LOGE(TAG, "ESP_ERR_INVALID_ARG: I2C bus initialization failed because of invalid argument.");
+    } else if (ret == ESP_ERR_NO_MEM) {
+        ESP_LOGE(TAG, "ESP_ERR_NO_MEM: Create I2C bus failed because of out of memory.");
+    } else {
+        ESP_LOGE(TAG, "Cannot add temperature sensor!");
+    }
+    
+    // Probe does not work
+    ret =  i2c_master_probe(bus_handle, BME680_I2C_ADDR_1, 500);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Probe tested BME680, OK!");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "ESP_ERR_NOT_FOUND: I2C probe failed, doesn't find the device with specific address you gave.");
+    } else if (ret == ESP_ERR_TIMEOUT) {
+        ESP_LOGE(TAG, "ESP_ERR_TIMEOUT: Operation timeout(larger than xfer_timeout_ms) because the bus is busy or hardware crash.");
+    } else {
+        ESP_LOGE(TAG, "Unexpected BME680, FAIL!");
+    }
+
 
     // CO2 test
     // co2_sensor_tst();
 
     // Temp and humidity bosh
-    bme650_tst();
+    // bme650_tst();
+    // bme650_alt();
 
 }
